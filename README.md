@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 # React Native WEBRTC CHAT APP
 
 ## Main focus of this project is using WebRTC feautures with Expo Dev Build
@@ -21,8 +19,3 @@
 * Chat function should be improved. (I'll do it when i find time to do it.)
 * Group chat feature can be implemented. 
 * Build on Android. 
-
->>>>>>> 74aa546bb683f7d1b0a08e22d7d3a5b24cacf44c
-=======
-
->>>>>>> 188646c5f30a0ccbdd853c8a90f380b4b9548c68
