@@ -12,20 +12,31 @@ import {
   mediaDevices,
   registerGlobals
 } from 'react-native-webrtc';
-import { io } from "socket.io-client";
+import io from "socket.io-client";
 import * as Crypto from 'expo-crypto';
+import { WEBSOCKET_URL } from '@env'
 
 
 export default function App() {
 
   const socket = useRef();
-  socket.current = io("ws://localhost:3000");
+  const connectionConfig = {
+    jsonp: false,
+    reconnection: true,
+    reconnectionDelay: 100,
+    reconnectionAttempts: 100000,
+    transports: ['websocket'],
+  };
+  socket.current = io(WEBSOCKET_URL, connectionConfig);
 
   const [roomId, setRoomId] = useState();
   const [myMessage, setMyMessage] = useState("");
   const [messages, setMessages] = useState([{}]);
-
+  const [isRoomCreated, setIsRoomCreated] = useState(false);
+  const [isCallCreated, setIsCallCreated] = useState(false);
+  const [isCallJoined, setIsCallJoined] = useState(false);
   const scrollViewRef = useRef(ScrollView);
+  const roomTextInputRef = useRef(TextInput);
 
   const guid = useRef();
 
@@ -113,55 +124,54 @@ export default function App() {
 
 
   //Get Available Media Devices
-  useEffect(() => {
+  const createRoom = async () => {
     guid.current = Crypto.randomUUID();
+    try {
+      const devices = await mediaDevices.enumerateDevices();
 
-    let getAvailableMediaDevices = async () => {
-      try {
-        const devices = await mediaDevices.enumerateDevices();
+      devices.map(device => {
+        if (device.kind != 'videoinput') { return; };
 
-        devices.map(device => {
-          if (device.kind != 'videoinput') { return; };
+        cameraCount.current = cameraCount.current + 1;
+      });
+    } catch (err) {
+      // Handle Error
+    };
 
-          cameraCount.current = cameraCount.current + 1;
-        });
-      } catch (err) {
-        // Handle Error
+    try {
+      const mediaStream = await mediaDevices.getUserMedia(mediaConstraints);
+
+      if (isVoiceOnly) {
+        videoTrack.current = await mediaStream.getVideoTracks()[0];
+        videoTrack.current.enabled = true;
       };
-    }
 
-    let getUserMedia = async () => {
-      try {
-        const mediaStream = await mediaDevices.getUserMedia(mediaConstraints);
+      localMediaStream.current = mediaStream;
+      localMediaStream.current.getTracks().forEach(
+        track => peerConnection.addTrack(track, localMediaStream)
+      );
 
-        if (isVoiceOnly) {
-          videoTrack.current = await mediaStream.getVideoTracks()[0];
-          videoTrack.current.enabled = false;
-        };
 
-        localMediaStream.current = mediaStream;
-        localMediaStream.current.getTracks().forEach(
-          track => peerConnection.addTrack(track, localMediaStream)
-        );
 
-      } catch (err) {
-        // Handle Error
-      };
-    }
+    } catch (err) {
+      // Handle Error
+    };
 
-    getAvailableMediaDevices();
-    getUserMedia();
-  }, [])
+    setIsRoomCreated(!isRoomCreated);
 
+  }
 
   // Initiate The Offer
   const startCall = async () => {
     isLocal = true;
     isJoined = false;
     let hostId = Crypto.randomUUID();
+    roomTextInputRef.current.value = hostId;
     setRoomId(hostId);
+    setIsCallCreated(!isCallCreated);
 
     const offerDescription = await peerConnection.current.createOffer();
+    console.log("offer: " + JSON.stringify(offerDescription, 0, 4));
     await peerConnection.current.setLocalDescription(offerDescription);
 
     const offerSdp = {
@@ -180,7 +190,10 @@ export default function App() {
   const joinCall = async () => {
     // Get the offer from signaling server and answer it
     socket.current.emit("getLocalOffer", roomId);
+    setIsCallJoined(!isCallJoined);
   };
+
+
   socket.current.on("localOfferForRemote", async (arg) => {
     const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
     await peerConnection.current.setRemoteDescription(offerDescription);
@@ -205,6 +218,7 @@ export default function App() {
       const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
       await peerConnection.current.setRemoteDescription(offerDescription);
     }
+
   });
 
 
@@ -242,14 +256,14 @@ export default function App() {
       <View style={styles.chatButton}>
         {!localMediaStream.current && (
           <View style={styles.buttonItem}>
-            <Button title="Click to start stream" onPress={videoTrack.current.enabled} />
+            <Button title="Click to start stream" onPress={() => createRoom()} />
           </View>
         )}
-        {localMediaStream.current && (
+        {!isCallJoined && localMediaStream.current && (
           <View style={styles.buttonItem}>
             <Button
               title="Click to start call"
-              onPress={startCall}
+              onPress={() => startCall()}
               disabled={remoteMediaStream.current}
             />
           </View>
@@ -262,11 +276,12 @@ export default function App() {
             <TextInput
               style={styles.roomInput}
               placeholder={"Room Id"}
+              ref={roomTextInputRef}
               onChangeText={(text) => setRoomId(text)}
               value={roomId}
             />
 
-            {!isJoined && localMediaStream.current && (
+            {!isCallCreated && localMediaStream.current && (
               <TouchableOpacity onPress={() => joinCall()}>
                 <View>
                   <Text style={styles.roomWrapperButton}>Join Call</Text>
@@ -297,10 +312,10 @@ export default function App() {
         )}
       </View>
       <View style={styles.rtcView}>
-        {localMediaStream.current && (
+        {remoteMediaStream.current && (
           <RTCView
             style={styles.rtc}
-            streamURL={localMediaStream.current.toURL()}
+            streamURL={remoteMediaStream.current.toURL()}
             mirror={true}
           />
         )}

@@ -1,6 +1,22 @@
-import { Server } from "socket.io"
-const port = 3000
-const io = new Server(port);
+const express = require("express");
+const app = express();
+const server = require("http").Server(app);
+const io = require("socket.io")(server);
+const port = 3000;
+const cors = require("cors");
+
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(cors());
+
+// const server = createServer(app);
+// const io = new Server(server, {
+//     cors: {
+//         origin: "http://localhost:3000"
+//     }
+// });
+
 
 let localSdp = {
     id: "",
@@ -71,7 +87,9 @@ io.on("connection", (socket) => {
 
     socket.on("exchangeICECandidates", (candidate) => {
         socket.emit("getICECandidates", candidate);
-        console.log(candidate);
+        console.log("geldi");
     });
 
 })
+
+server.listen(port, () => console.log("server running on port:" + port));
