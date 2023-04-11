@@ -47,8 +47,6 @@ export default function App() {
   const peerConnection = useRef();
   const dataChannel = useRef();
   let isVoiceOnly = false;
-  let isLocal = false;
-  let isJoined = true;
 
 
   // Defining Media Constraints
@@ -92,10 +90,10 @@ export default function App() {
   peerConnection.current.addEventListener('icegatheringstatechange', event => { });
   peerConnection.current.addEventListener('negotiationneeded', event => { });
   peerConnection.current.addEventListener('signalingstatechange', event => { });
-  peerConnection.current.addEventListener('track', event => {
+  peerConnection.current.addEventListener('track', async (event) => {
     // Grab the remote track from the connected participant.
-    remoteMediaStream.current = remoteMediaStream.current || new MediaStream();
-    remoteMediaStream.current.addTrack(event.track, remoteMediaStream.current);
+    console.log("remoteStream");
+    remoteMediaStream.current = event.streams;
   });
 
   // Create Data Channel and Listen the events
@@ -103,8 +101,10 @@ export default function App() {
 
   dataChannel.current.addEventListener('open', event => { });
   dataChannel.current.addEventListener('close', event => { });
-  dataChannel.current.addEventListener('message', message => {
-    setMessages([...messages, message]);
+  dataChannel.current.addEventListener('message', event => {
+    console.log("mesaj geldi: " + JSON.stringify(event.data));
+    setMessages(prev => [...prev, event.data]);
+    socket.current.emit("messageHasArrived", event.data);
   });
 
   // This event is for the second client. Not the one who create the channel
@@ -119,6 +119,7 @@ export default function App() {
 
   // Exchange ICE Candidates
   socket.current.on("getICECandidates", (candidate) => {
+    console.log("candidate geldi");
     peerConnection.current.addIceCandidate(candidate);
   });
 
@@ -148,7 +149,7 @@ export default function App() {
 
       localMediaStream.current = mediaStream;
       localMediaStream.current.getTracks().forEach(
-        track => peerConnection.addTrack(track, localMediaStream)
+        track => peerConnection.current.addTrack(track, localMediaStream.current)
       );
 
 
@@ -163,12 +164,9 @@ export default function App() {
 
   // Initiate The Offer
   const startCall = async () => {
-    isLocal = true;
-    isJoined = false;
     let hostId = Crypto.randomUUID();
     roomTextInputRef.current.value = hostId;
-    setRoomId(hostId);
-    setIsCallCreated(!isCallCreated);
+
 
     const offerDescription = await peerConnection.current.createOffer();
     console.log("offer: " + JSON.stringify(offerDescription, 0, 4));
@@ -181,24 +179,29 @@ export default function App() {
         type: offerDescription.type,
       }
     };
-
+    setRoomId(hostId);
+    setIsCallCreated(!isCallCreated);
     socket.current.emit("localOffer", offerSdp);
   };
 
 
   // Join the remote call
   const joinCall = async () => {
+    setIsCallJoined(!isCallJoined);
     // Get the offer from signaling server and answer it
     socket.current.emit("getLocalOffer", roomId);
-    setIsCallJoined(!isCallJoined);
+
   };
 
 
   socket.current.on("localOfferForRemote", async (arg) => {
-    const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
+    console.log("geldi buraya");
+    console.log("localOfferForRemote girdi");
+    console.log(arg.localOffer);
+    const offerDescription = new RTCSessionDescription(arg.localOffer);
     await peerConnection.current.setRemoteDescription(offerDescription);
 
-    const answerDescription = await peerConnection.createAnswer();
+    const answerDescription = await peerConnection.current.createAnswer();
     await peerConnection.current.setLocalDescription(answerDescription);
 
     const offerSdp = {
@@ -210,27 +213,26 @@ export default function App() {
     };
 
     socket.current.emit("remote", offerSdp);
-    socket.current.emit("getRemoteAnswerForLocal", "");
   });
 
   socket.current.on("remoteAnswerForLocal", async (arg) => {
-    if (isLocal) {
-      const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
-      await peerConnection.current.setRemoteDescription(offerDescription);
-    }
-
+    console.log("remoteAnswerForLocal girdi");
+    console.log("remoteAnsForLocal: " + JSON.stringify(arg, 0, 4));
+    const offerDescription = new RTCSessionDescription(arg.localOffer);
+    await peerConnection.current.setRemoteDescription(offerDescription);
   });
 
 
 
   // sendMessage via dataChannel
   const sendMessage = () => {
+    console.log("yollandı");
     const msg = {
       message: myMessage,
       owner: guid.current
     };
 
-    setMessages([...messages, msg]);
+    setMessages(prev => [...prev, msg]);
     dataChannel.current.send(myMessage);
   };
 
@@ -246,8 +248,8 @@ export default function App() {
     peerConnection.current = null;
     dataChannel.current.close();
     dataChannel.current = null;
-    isLocal = false;
-    isJoined = true;
+    setIsCallCreated(!isCallCreated);
+    setIsCallJoined(!isCallJoined);
   }
 
 
