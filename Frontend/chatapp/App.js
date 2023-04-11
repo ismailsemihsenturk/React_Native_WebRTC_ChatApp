@@ -104,7 +104,6 @@ export default function App() {
   dataChannel.current.addEventListener('message', event => {
     console.log("mesaj geldi: " + JSON.stringify(event.data));
     setMessages(prev => [...prev, event.data]);
-    socket.current.emit("messageHasArrived", event.data);
   });
 
   // This event is for the second client. Not the one who create the channel
@@ -114,13 +113,6 @@ export default function App() {
     // Now you've got the datachannel.
     // You can hookup and use the same events as above
     datachannel.send('Hey There!')
-  });
-
-
-  // Exchange ICE Candidates
-  socket.current.on("getICECandidates", (candidate) => {
-    console.log("candidate geldi");
-    peerConnection.current.addIceCandidate(candidate);
   });
 
 
@@ -195,10 +187,8 @@ export default function App() {
 
 
   socket.current.on("localOfferForRemote", async (arg) => {
-    console.log("geldi buraya");
-    console.log("localOfferForRemote girdi");
-    console.log(arg.localOffer);
-    const offerDescription = new RTCSessionDescription(arg.localOffer);
+    console.log("localOfferForRemote: " + JSON.stringify(arg, 0, 4));
+    const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
     await peerConnection.current.setRemoteDescription(offerDescription);
 
     const answerDescription = await peerConnection.current.createAnswer();
@@ -216,17 +206,28 @@ export default function App() {
   });
 
   socket.current.on("remoteAnswerForLocal", async (arg) => {
-    console.log("remoteAnswerForLocal girdi");
-    console.log("remoteAnsForLocal: " + JSON.stringify(arg, 0, 4));
-    const offerDescription = new RTCSessionDescription(arg.localOffer);
-    await peerConnection.current.setRemoteDescription(offerDescription);
+    if (arg.socket !== socket.current.id) {
+      console.log("remoteAnswerForLocal: " + JSON.stringify(arg, 0, 4));
+      const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
+      await peerConnection.current.setRemoteDescription(offerDescription);
+    }
   });
+
+
+  // Exchange ICE Candidates
+  socket.current.on("getICECandidates", (candidate) => {
+    console.log("candidate");
+    if (peerConnection.current.remoteDescription !== null) {
+      peerConnection.current.addIceCandidate(candidate);
+    }
+  });
+
 
 
 
   // sendMessage via dataChannel
   const sendMessage = () => {
-    console.log("yollandı");
+    console.log("send");
     const msg = {
       message: myMessage,
       owner: guid.current

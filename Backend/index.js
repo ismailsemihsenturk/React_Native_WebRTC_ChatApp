@@ -79,7 +79,7 @@ io.on("connection", (socket) => {
             remoteSdp.remoteOffer = localSdp.localOffer;
             remoteSdp.localOffer.offer = offerSdp.offer;
             localSdp.remoteOffer = remoteSdp.localOffer;
-            socket.broadcast.emit("remoteAnswerForLocal", remoteSdp);
+            socket.broadcast.emit("remoteAnswerForLocal", { remoteSdp: remoteSdp, socket: socket.id });
             console.log("remote: " + JSON.stringify(offerSdp, 0, 4));
             console.log("remoteAnswerForLocal:" + JSON.stringify(remoteSdp, 0, 4));
         }
@@ -93,11 +93,6 @@ io.on("connection", (socket) => {
             console.log("getICECandidates:" + JSON.stringify(candidate, 0, 4));
         }
     });
-
-    socket.on("messageHasArrived", (message) => {
-        console.log("mesaj: " + message);
-    });
-
 })
 
 server.listen(port, () => console.log("server running on port:" + port));
