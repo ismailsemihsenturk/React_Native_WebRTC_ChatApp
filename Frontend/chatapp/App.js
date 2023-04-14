@@ -15,19 +15,9 @@ import {
 import io from "socket.io-client";
 import * as Crypto from 'expo-crypto';
 import { WEBSOCKET_URL } from '@env'
-
+import { socket } from './socket';
 
 export default function App() {
-
-  const socket = useRef();
-  const connectionConfig = {
-    jsonp: false,
-    reconnection: true,
-    reconnectionDelay: 100,
-    reconnectionAttempts: 100000,
-    transports: ['websocket'],
-  };
-  socket.current = io(WEBSOCKET_URL, connectionConfig);
 
   const [roomId, setRoomId] = useState();
   const [myMessage, setMyMessage] = useState("");
@@ -35,6 +25,11 @@ export default function App() {
   const [isRoomCreated, setIsRoomCreated] = useState(false);
   const [isCallCreated, setIsCallCreated] = useState(false);
   const [isCallJoined, setIsCallJoined] = useState(false);
+  const [isLocalAnswerSet, setIsLocalAnswerSet] = useState(false);
+
+  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [fooEvents, setFooEvents] = useState([]);
+
   const scrollViewRef = useRef(ScrollView);
   const roomTextInputRef = useRef(TextInput);
 
@@ -48,6 +43,29 @@ export default function App() {
   const dataChannel = useRef();
   let isVoiceOnly = false;
 
+  useEffect(() => {
+    function onConnect() {
+      setIsConnected(true);
+    }
+
+    function onDisconnect() {
+      setIsConnected(false);
+    }
+
+    function onFooEvent(value) {
+      setFooEvents(previous => [...previous, value]);
+    }
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('foo', onFooEvent);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('foo', onFooEvent);
+    };
+  }, []);
 
   // Defining Media Constraints
   let mediaConstraints = {
@@ -82,7 +100,7 @@ export default function App() {
   peerConnection.current.addEventListener('connectionstatechange', event => { });
   peerConnection.current.addEventListener('icecandidate', event => {
     if (event.candidate) {
-      socket.current.emit("exchangeICECandidates", event.candidate);
+      socket.to(roomId).emit("exchangeICECandidates", { candidate: event.candidate, room: roomId });
     }
   });
   peerConnection.current.addEventListener('icecandidateerror', event => { });
@@ -93,7 +111,7 @@ export default function App() {
   peerConnection.current.addEventListener('track', async (event) => {
     // Grab the remote track from the connected participant.
     console.log("remoteStream");
-    remoteMediaStream.current = event.streams;
+    remoteMediaStream.current = event.streams[0];;
   });
 
   // Create Data Channel and Listen the events
@@ -106,13 +124,9 @@ export default function App() {
     setMessages(prev => [...prev, event.data]);
   });
 
-  // This event is for the second client. Not the one who create the channel
+  // This event is for the remote peer.
   peerConnection.current.addEventListener('datachannel', event => {
-    let datachannel = event.channel;
-
-    // Now you've got the datachannel.
-    // You can hookup and use the same events as above
-    datachannel.send('Hey There!')
+    dataChannel.current = event.channel;
   });
 
 
@@ -144,86 +158,64 @@ export default function App() {
         track => peerConnection.current.addTrack(track, localMediaStream.current)
       );
 
-
-
     } catch (err) {
       // Handle Error
     };
-
     setIsRoomCreated(!isRoomCreated);
-
   }
 
-  // Initiate The Offer
+  // Initiate The Call
   const startCall = async () => {
     let hostId = Crypto.randomUUID();
     roomTextInputRef.current.value = hostId;
-
-
-    const offerDescription = await peerConnection.current.createOffer();
-    console.log("offer: " + JSON.stringify(offerDescription, 0, 4));
-    await peerConnection.current.setLocalDescription(offerDescription);
-
-    const offerSdp = {
-      id: hostId,
-      offer: {
-        sdp: offerDescription.sdp,
-        type: offerDescription.type,
-      }
-    };
+    socket.emit("create", hostId);
     setRoomId(hostId);
     setIsCallCreated(!isCallCreated);
-    socket.current.emit("localOffer", offerSdp);
   };
 
 
-  // Join the remote call
+  // Join The Remote Call
   const joinCall = async () => {
     setIsCallJoined(!isCallJoined);
     // Get the offer from signaling server and answer it
-    socket.current.emit("getLocalOffer", roomId);
-
+    socket.emit("create", roomId);
+    socket.emit("start", { room: roomId });
   };
 
 
-  socket.current.on("localOfferForRemote", async (arg) => {
-    console.log("localOfferForRemote: " + JSON.stringify(arg, 0, 4));
-    const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
-    await peerConnection.current.setRemoteDescription(offerDescription);
+  socket.on("setLocalOffer", async (arg) => {
+    console.log("setLocalOffer");
 
+    const offerDescription = await peerConnection.current.createOffer();
+    await peerConnection.current.setLocalDescription(offerDescription);
+
+    socket.to(roomId).emit("getLocalOffer", { offerSdp: offerDescription, room: roomId });
+  });
+
+
+  socket.on("setRemoteAnswer", async (arg) => {
+    console.log("setRemoteAnswer");
+
+    const offerDescription = new RTCSessionDescription(arg.offerSdp);
+    await peerConnection.current.setRemoteDescription(offerDescription);
     const answerDescription = await peerConnection.current.createAnswer();
     await peerConnection.current.setLocalDescription(answerDescription);
 
-    const offerSdp = {
-      id: roomId,
-      offer: {
-        type: answerDescription.type,
-        sdp: answerDescription.sdp,
-      }
-    };
-
-    socket.current.emit("remote", offerSdp);
-  });
-
-  socket.current.on("remoteAnswerForLocal", async (arg) => {
-    if (arg.socket !== socket.current.id) {
-      console.log("remoteAnswerForLocal: " + JSON.stringify(arg, 0, 4));
-      const offerDescription = new RTCSessionDescription(arg.localOffer.offer);
-      await peerConnection.current.setRemoteDescription(offerDescription);
-    }
+    socket.to(roomId).emit("getRemoteAnswer", { answerSdp: answerDescription, room: roomId });
   });
 
 
-  // Exchange ICE Candidates
-  socket.current.on("getICECandidates", (candidate) => {
-    console.log("candidate");
-    if (peerConnection.current.remoteDescription !== null) {
-      peerConnection.current.addIceCandidate(candidate);
-    }
+  socket.on("setLocalAnswer", async (arg) => {
+    console.log("setLocalAnswer");
+    const answerDescription = new RTCSessionDescription(arg.answerSdp);
+    await peerConnection.current.setRemoteDescription(answerDescription);
   });
 
 
-
+  socket.on("getICECandidates", (arg) => {
+    console.log("getICECandidates");
+    peerConnection.current.addIceCandidate(arg.candidate);
+  });
 
   // sendMessage via dataChannel
   const sendMessage = () => {

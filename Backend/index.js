@@ -18,81 +18,32 @@ app.use(cors());
 // });
 
 
-let localSdp = {
-    id: "",
-    localOffer: {
-        offer: {
-            sdp: "",
-            type: "",
-        },
+io.sockets.on('connection', function (socket) {
 
-    },
-    remoteOffer: {
-        offer: {
-            sdp: "",
-            type: "",
-        },
-    },
-};
-
-let remoteSdp = {
-    id: "",
-    localOffer: {
-        offer: {
-            sdp: "",
-            type: "",
-        },
-
-    },
-    remoteOffer: {
-        offer: {
-            sdp: "",
-            type: "",
-        },
-    },
-};
-
-// socket.emit 1v1
-// socket.broadcast.emit 1 to many except itself
-// io.sockets.emit every client
-
-io.on("connection", (socket) => {
-    console.log("hello world!")
-
-
-    socket.on("localOffer", (offerSdp) => {
-        localSdp.id = offerSdp.id;
-        localSdp.localOffer = offerSdp.offer;
-        console.log("localOffer: " + JSON.stringify(offerSdp, 0, 4));
+    socket.on("create", (room) => {
+        socket.join(room);
     });
 
-    socket.on("getLocalOffer", (roomId) => {
-        if (localSdp.id === roomId) {
-            socket.emit("localOfferForRemote", localSdp);
-            console.log("localOfferForRemote:" + JSON.stringify(localSdp, 0, 4));
-        }
+    socket.on("start", (arg) => {
+        console.log("room: " + JSON.stringify(arg, 0, 4));
+        socket.to(arg.room).emit("setLocalOffer");
     });
 
-    socket.on("remote", (offerSdp) => {
-        if (localSdp.id === offerSdp.id) {
-            remoteSdp.id = offerSdp.id;
-            remoteSdp.remoteOffer = localSdp.localOffer;
-            remoteSdp.localOffer.offer = offerSdp.offer;
-            localSdp.remoteOffer = remoteSdp.localOffer;
-            socket.broadcast.emit("remoteAnswerForLocal", { remoteSdp: remoteSdp, socket: socket.id });
-            console.log("remote: " + JSON.stringify(offerSdp, 0, 4));
-            console.log("remoteAnswerForLocal:" + JSON.stringify(remoteSdp, 0, 4));
-        }
+    socket.on("getLocalOffer", (arg) => {
+        console.log("getLocalOffer: " + JSON.stringify(arg, 0, 4));
+        socket.to(arg.room).emit("setRemoteAnswer", { offerSdp: arg.offerSdp, room: arg.room });
     });
 
-    socket.on("exchangeICECandidates", (candidate) => {
-        console.log("remoteSDP check: " + JSON.stringify(remoteSdp, 0, 4));
-        if (remoteSdp.localOffer.offer.sdp !== "") {
-            io.sockets.emit("getICECandidates", candidate);
-            //socket.emit("getICECandidates", candidate);
-            console.log("getICECandidates:" + JSON.stringify(candidate, 0, 4));
-        }
+    socket.on("getRemoteAnswer", (arg) => {
+        console.log("getRemoteAnswer: " + JSON.stringify(arg, 0, 4));
+        socket.to(arg.room).emit("setLocalAnswer", { answerSdp: arg.offerSdp, room: arg.room });
     });
-})
+
+    socket.on("exchangeICECandidates", (arg) => {
+        console.log("exchangeICECandidates: " + JSON.stringify(arg, 0, 4));
+        socket.to(arg.room).emit("getICECandidates", { candidate: arg.candidate, room: arg.room });
+    });
+
+});
 
 server.listen(port, () => console.log("server running on port:" + port));
