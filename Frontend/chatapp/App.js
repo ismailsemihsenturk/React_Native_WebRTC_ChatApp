@@ -100,7 +100,7 @@ export default function App() {
   peerConnection.current.addEventListener('connectionstatechange', event => { });
   peerConnection.current.addEventListener('icecandidate', event => {
     if (event.candidate) {
-      socket.to(roomId).emit("exchangeICECandidates", { candidate: event.candidate, room: roomId });
+      socket.emit("exchangeICECandidates", { candidate: event.candidate, room: roomId });
     }
   });
   peerConnection.current.addEventListener('icecandidateerror', event => { });
