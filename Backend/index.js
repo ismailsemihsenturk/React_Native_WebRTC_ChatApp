@@ -20,28 +20,28 @@ app.use(cors());
 
 io.sockets.on('connection', function (socket) {
 
-    socket.on("create", (room) => {
-        socket.join(room);
+    socket.on("create", (roomId) => {
+        socket.join(roomId);
     });
 
     socket.on("start", (arg) => {
-        console.log("room: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("setLocalOffer");
+        console.log("roomId: " + JSON.stringify(arg, 0, 4));
+        socket.to(arg.room).emit("setLocalOffer", { roomId: arg.roomId });
     });
 
     socket.on("getLocalOffer", (arg) => {
         console.log("getLocalOffer: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("setRemoteAnswer", { offerSdp: arg.offerSdp, room: arg.room });
+        socket.to(arg.room).emit("setRemoteAnswer", { offerSdp: arg.offerSdp, roomId: arg.roomId });
     });
 
     socket.on("getRemoteAnswer", (arg) => {
         console.log("getRemoteAnswer: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("setLocalAnswer", { answerSdp: arg.offerSdp, room: arg.room });
+        socket.to(arg.room).emit("setLocalAnswer", { answerSdp: arg.offerSdp, roomId: arg.roomId });
     });
 
     socket.on("exchangeICECandidates", (arg) => {
         console.log("exchangeICECandidates: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("getICECandidates", { candidate: arg.candidate, room: arg.room });
+        socket.to(arg.room).emit("getICECandidates", { candidate: arg.candidate, roomId: arg.roomId });
     });
 
 });
