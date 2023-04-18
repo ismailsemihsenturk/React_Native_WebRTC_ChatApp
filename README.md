@@ -18,4 +18,4 @@
 
 * Chat function should be improved. (I'll do it when i find time to do it.)
 * Group chat feature can be implemented. 
-* Build on Android. 
+* Build on Android.
