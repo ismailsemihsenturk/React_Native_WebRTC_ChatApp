@@ -17,5 +17,5 @@
 ### I started project with `managed expo` then change to the `dev-client`
 
 * Chat function should be improved. (I'll do it when i find time to do it.)
-* Group chat feature can be implemented. 
+* Group chat feature can be implemented.
 * Build on Android.
