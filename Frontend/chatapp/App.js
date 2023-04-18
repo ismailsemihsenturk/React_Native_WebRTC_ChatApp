@@ -58,27 +58,17 @@ export default function App() {
   //SOCKET Listeners
   useEffect(() => {
 
-    socket.on("setLocalOffer", async (data, err) => {
-      if (err) {
-        console.log(err);
-        return;
-      }
-
+    async function onSetLocalOffer(data) {
       console.log("setLocalOffer: " + JSON.stringify(data, 0, 4));
       const offerDescription = await peerConnection.createOffer();
       console.log("offerDesc: " + JSON.stringify(offerDescription));
       await peerConnection.setLocalDescription(offerDescription);
 
       socket.to(data.roomId).emit("getLocalOffer", { offerSdp: offerDescription, roomId: data.roomId });
-    });
+    }
+    socket.on("setLocalOffer", onSetLocalOffer);
 
-
-    socket.on("setRemoteAnswer", async (data, err) => {
-      if (err) {
-        console.log(err);
-        return;
-      }
-
+    async function onSetRemoteAnswer(data) {
       console.log("SetRemoteAnswer: " + JSON.stringify(data, 0, 4));
       const offerDescription = new RTCSessionDescription(data.offerSdp);
       await peerConnection.setRemoteDescription(offerDescription);
@@ -86,36 +76,29 @@ export default function App() {
       await peerConnection.setLocalDescription(answerDescription);
 
       socket.to(data.roomId).emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: data.roomId });
-    });
+    }
+    socket.on("setRemoteAnswer", onSetRemoteAnswer);
 
 
-    socket.on("setLocalAnswer", async (data, err) => {
-      if (err) {
-        console.log(err);
-        return;
-      }
-
+    async function onSetLocalAnswer(data) {
       console.log("SetLocalAnswer: " + JSON.stringify(data, 0, 4));
       const answerDescription = new RTCSessionDescription(data.answerSdp);
       await peerConnection.setRemoteDescription(answerDescription);
-    });
+    }
+    socket.on("setLocalAnswer", onSetLocalAnswer);
 
 
-    socket.on("getICECandidates", async (data, err) => {
-      if (err) {
-        console.log(err);
-        return;
-      }
-
+    async function onGetICECandidates(data) {
       console.log("getICECandidates: " + JSON.stringify(data, 0, 4));
       peerConnection.addIceCandidate(data.candidate);
-    });
+    }
+    socket.on("getICECandidates", onGetICECandidates);
 
     return () => {
-      socket.off("setLocalOffer", () => { });
-      socket.off("setRemoteAnswer", () => { });
-      socket.off("setLocalAnswer", () => { });
-      socket.off("getICECandidates", () => { });
+      socket.off("setLocalOffer", onSetLocalOffer);
+      socket.off("setRemoteAnswer", onSetRemoteAnswer);
+      socket.off("setLocalAnswer", onSetLocalAnswer);
+      socket.off("getICECandidates", onGetICECandidates);
     }
   }, []);
 
