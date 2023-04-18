@@ -26,6 +26,7 @@ export default function ChatApp(props) {
     const [isCallCreated, setIsCallCreated] = useState(false);
     const [isCallJoined, setIsCallJoined] = useState(false);
     const [joinId, setJoinId] = useState();
+    const [videoTrack, setVideoTrack] = useState(null);
 
     const [myMessage, setMyMessage] = useState("");
 
@@ -53,8 +54,9 @@ export default function ChatApp(props) {
             const mediaStream = await mediaDevices.getUserMedia(mediaConstraints);
 
             if (isVoiceOnly) {
-                props.videoTrack = await mediaStream.getVideoTracks()[0];
-                props.videoTrack.enabled = true;
+                let videoTrackObj = await mediaStream.getVideoTracks()[0];
+                setVideoTrack(videoTrackObj);
+                videoTrack.enabled = true;
             };
 
             props.setLocalMediaStream(mediaStream);

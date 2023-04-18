@@ -25,7 +25,6 @@ export default function App() {
 
   const [localMediaStream, setLocalMediaStream] = useState(null);
   const [remoteMediaStream, setRemoteMediaStream] = useState(null);
-  const [videoTrack, setVideoTrack] = useState(null);
 
   const [messages, setMessages] = useState([{}]);
 
@@ -59,49 +58,64 @@ export default function App() {
   //SOCKET Listeners
   useEffect(() => {
 
-    async function onSetLocalOffer(arg) {
-      console.log("setLocalOffer: " + JSON.stringify(arg, 0, 4));
+    socket.on("setLocalOffer", async (data, err) => {
+      if (err) {
+        console.log(err);
+        return;
+      }
 
+      console.log("setLocalOffer: " + JSON.stringify(data, 0, 4));
       const offerDescription = await peerConnection.createOffer();
+      console.log("offerDesc: " + JSON.stringify(offerDescription));
       await peerConnection.setLocalDescription(offerDescription);
 
-      socket.to(arg.roomId).emit("getLocalOffer", { offerSdp: offerDescription, roomId: arg.roomId });
-    }
+      socket.to(data.roomId).emit("getLocalOffer", { offerSdp: offerDescription, roomId: data.roomId });
+    });
 
-    async function onSetRemoteAnswer(arg) {
-      console.log("SetRemoteAnswer: " + JSON.stringify(arg, 0, 4));
 
-      const offerDescription = new RTCSessionDescription(arg.offerSdp);
+    socket.on("setRemoteAnswer", async (data, err) => {
+      if (err) {
+        console.log(err);
+        return;
+      }
+
+      console.log("SetRemoteAnswer: " + JSON.stringify(data, 0, 4));
+      const offerDescription = new RTCSessionDescription(data.offerSdp);
       await peerConnection.setRemoteDescription(offerDescription);
       const answerDescription = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answerDescription);
 
-      socket.to(arg.roomId).emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: arg.roomId });
-    }
+      socket.to(data.roomId).emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: data.roomId });
+    });
 
-    async function onSetLocalAnswer(arg) {
-      console.log("SetLocalAnswer: " + JSON.stringify(arg, 0, 4));
 
-      const answerDescription = new RTCSessionDescription(arg.answerSdp);
+    socket.on("setLocalAnswer", async (data, err) => {
+      if (err) {
+        console.log(err);
+        return;
+      }
+
+      console.log("SetLocalAnswer: " + JSON.stringify(data, 0, 4));
+      const answerDescription = new RTCSessionDescription(data.answerSdp);
       await peerConnection.setRemoteDescription(answerDescription);
-    }
-
-    function onGetICECandidates(arg) {
-      console.log("getICECandidates: " + JSON.stringify(arg, 0, 4));
-      peerConnection.addIceCandidate(arg.candidate);
-    }
+    });
 
 
+    socket.on("getICECandidates", async (data, err) => {
+      if (err) {
+        console.log(err);
+        return;
+      }
 
-    socket.on("setLocalOffer", onSetLocalOffer);
-    socket.on("setRemoteAnswer", onSetRemoteAnswer);
-    socket.on("setLocalAnswer", onSetLocalAnswer);
-    socket.on("getICECandidates", onGetICECandidates);
+      console.log("getICECandidates: " + JSON.stringify(data, 0, 4));
+      peerConnection.addIceCandidate(data.candidate);
+    });
+
     return () => {
-      socket.off("setLocalOffer", onSetLocalOffer);
-      socket.off("setRemoteAnswer", onSetRemoteAnswer);
-      socket.off("setLocalAnswer", onSetLocalAnswer);
-      socket.off("getICECandidates", onGetICECandidates);
+      socket.off("setLocalOffer", () => { });
+      socket.off("setRemoteAnswer", () => { });
+      socket.off("setLocalAnswer", () => { });
+      socket.off("getICECandidates", () => { });
     }
   }, []);
 
@@ -116,8 +130,7 @@ export default function App() {
       console.log("remoteStream");
       setRemoteMediaStream(e.streams[0]);
     }
-    return () => {
-    }
+
   }, [remoteMediaStream]);
 
 
@@ -128,14 +141,16 @@ export default function App() {
       setMessages([...messages, { message: e.data.message, owner: e.data.owner }]);
     }
 
-    return () => {
-
+    //DataChannel Event Listeners
+    peerConnection.onopen = (e) => {
+    }
+    peerConnection.onclose = (e) => {
     }
   }, [messages]);
 
 
+  //RTC Event Listeners
   useEffect(() => {
-    //RTC Event Listeners
     peerConnection.onconnectionstatechange = (e) => {
 
     }
@@ -152,8 +167,13 @@ export default function App() {
 
     //ICE Event Listeners
     peerConnection.onicecandidate = (e) => {
-      if (e.candidate) {
+      console.log("candidate event: " + JSON.stringify(e.candidate));
+      console.log("peerCon: " + JSON.stringify(peerConnection));
+      if (e.candidate !== null) {
+        console.log("here" + JSON.stringify(e));
         socket.to(roomId).emit("exchangeICECandidates", { candidate: e.candidate, roomId: roomId });
+      } else {
+        console.log("candidate is null");
       }
     }
     peerConnection.onicecandidateerror = (e) => {
@@ -165,20 +185,11 @@ export default function App() {
     peerConnection.onicegatheringstatechange = (e) => {
 
     }
-
-    //DataChannel Event Listeners
-    peerConnection.onopen = (e) => {
-    }
-    peerConnection.onclose = (e) => {
-    }
-
-    return () => {
-    }
   }, []);
 
   return (
     <>
-      <ChatApp guid={guid.current} roomId={roomId} setRoomId={setRoomId} localMediaStream={localMediaStream} setLocalMediaStream={setLocalMediaStream} remoteMediaStream={remoteMediaStream} videoTrack={videoTrack} messages={messages} ></ChatApp>
+      <ChatApp guid={guid.current} roomId={roomId} setRoomId={setRoomId} localMediaStream={localMediaStream} setLocalMediaStream={setLocalMediaStream} remoteMediaStream={remoteMediaStream} messages={messages} ></ChatApp>
     </>
   );
 }

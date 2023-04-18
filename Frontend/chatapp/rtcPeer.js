@@ -38,5 +38,5 @@ export const sessionConstraints = {
 };
 
 // Start Peer Connection and Data Channel
-export const peerConnection = new RTCPeerConnection(peerConstraints);
-export const dataChannel = peerConnection.createDataChannel('my_channel');
+export let peerConnection = new RTCPeerConnection(peerConstraints);
+export let dataChannel = peerConnection.createDataChannel('my_channel');

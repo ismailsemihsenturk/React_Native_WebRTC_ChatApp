@@ -26,22 +26,22 @@ io.sockets.on('connection', function (socket) {
 
     socket.on("start", (arg) => {
         console.log("roomId: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("setLocalOffer", { roomId: arg.roomId });
+        socket.to(arg.roomId).emit("setLocalOffer", { roomId: arg.roomId });
     });
 
     socket.on("getLocalOffer", (arg) => {
         console.log("getLocalOffer: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("setRemoteAnswer", { offerSdp: arg.offerSdp, roomId: arg.roomId });
+        socket.to(arg.roomId).emit("setRemoteAnswer", { offerSdp: arg.offerSdp, roomId: arg.roomId });
     });
 
     socket.on("getRemoteAnswer", (arg) => {
         console.log("getRemoteAnswer: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("setLocalAnswer", { answerSdp: arg.offerSdp, roomId: arg.roomId });
+        socket.to(arg.roomId).emit("setLocalAnswer", { answerSdp: arg.offerSdp, roomId: arg.roomId });
     });
 
     socket.on("exchangeICECandidates", (arg) => {
         console.log("exchangeICECandidates: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.room).emit("getICECandidates", { candidate: arg.candidate, roomId: arg.roomId });
+        socket.to(arg.roomId).emit("getICECandidates", { candidate: arg.candidate, roomId: arg.roomId });
     });
 
 });
