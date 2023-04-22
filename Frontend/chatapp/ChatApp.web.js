@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, SafeAreaView, Button, KeyboardAvoidingView, TextInput, TouchableOpacity } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, SafeAreaView, Button, KeyboardAvoidingView, TextInput, TouchableOpacity, Platform } from 'react-native';
 import {
     ScreenCapturePickerView,
     RTCPeerConnection,
@@ -170,7 +170,7 @@ export default function ChatApp(props) {
                 {props.localMediaStream && (
                     <RTCView
                         style={styles.rtc}
-                        streamURL={props.localMediaStream.toURL()}
+                        stream={props.localMediaStream}
                         mirror={true}
                     />
                 )}
@@ -179,7 +179,7 @@ export default function ChatApp(props) {
                 {props.remoteMediaStream && (
                     <RTCView
                         style={styles.rtc}
-                        streamURL={props.remoteMediaStream.toURL()}
+                        stream={props.remoteMediaStream}
                         mirror={true}
                     />
                 )}
