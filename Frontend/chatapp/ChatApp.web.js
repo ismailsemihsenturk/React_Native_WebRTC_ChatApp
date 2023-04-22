@@ -11,12 +11,12 @@ import {
     MediaStreamTrack,
     mediaDevices,
     registerGlobals
-} from 'react-native-webrtc';
+} from 'react-native-webrtc-web-shim';
 import io from "socket.io-client";
 import * as Crypto from 'expo-crypto';
 import { WEBSOCKET_URL } from '@env'
-import { socket } from './socket';
-import { peerConnection, dataChannel, mediaConstraints } from './rtcPeer';
+import { socketWeb } from './socket';
+import { peerConnection, dataChannel, mediaConstraints } from './rtcPeer.web';
 import Messenger from './Messenger';
 
 
@@ -77,7 +77,7 @@ export default function ChatApp(props) {
         props.setRoomId(randomRoomId);
         setJoinId(randomRoomId);
         setIsCallCreated(!isCallCreated);
-        socket.emit("create", randomRoomId);
+        socketWeb.emit("create", randomRoomId);
 
     };
 
@@ -86,8 +86,8 @@ export default function ChatApp(props) {
     const joinCall = async () => {
         setIsCallJoined(!isCallJoined);
         // Get the offer from signaling server and answer it 
-        socket.emit("create", joinId);
-        socket.emit("start", { roomId: joinId });
+        socketWeb.emit("create", joinId);
+        socketWeb.emit("start", { roomId: joinId });
     };
 
     // sendMessage via dataChannel

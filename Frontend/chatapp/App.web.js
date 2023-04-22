@@ -11,17 +11,17 @@ import {
   MediaStreamTrack,
   mediaDevices,
   registerGlobals
-} from 'react-native-webrtc';
+} from 'react-native-webrtc-web-shim';
 import io from "socket.io-client";
 import * as Crypto from 'expo-crypto';
 import { WEBSOCKET_URL } from '@env'
-import { socket } from './socket';
-import { peerConnection, dataChannel } from './rtcPeer';
+import { socketWeb } from './socket';
+import { peerConnection, dataChannel } from './rtcPeer.web';
 import ChatApp from './ChatApp';
 
 export default function App() {
 
-  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [isConnected, setIsConnected] = useState(socketWeb.connected);
 
   const [localMediaStream, setLocalMediaStream] = useState(null);
   const [remoteMediaStream, setRemoteMediaStream] = useState(null);
@@ -45,12 +45,12 @@ export default function App() {
     }
 
 
-    socket.on('connect', onConnect);
-    socket.on('disconnect', onDisconnect);
+    socketWeb.on('connect', onConnect);
+    socketWeb.on('disconnect', onDisconnect);
 
     return () => {
-      socket.off('connect', onConnect);
-      socket.off('disconnect', onDisconnect);
+      socketWeb.off('connect', onConnect);
+      socketWeb.off('disconnect', onDisconnect);
     };
   }, []);
 
@@ -64,9 +64,9 @@ export default function App() {
       console.log("offerDesc: " + JSON.stringify(offerDescription));
       await peerConnection.setLocalDescription(offerDescription);
 
-      socket.to(data.roomId).emit("getLocalOffer", { offerSdp: offerDescription, roomId: data.roomId });
+      socketWeb.to(data.roomId).emit("getLocalOffer", { offerSdp: offerDescription, roomId: data.roomId });
     }
-    socket.on("setLocalOffer", onSetLocalOffer);
+    socketWeb.on("setLocalOffer", onSetLocalOffer);
 
     async function onSetRemoteAnswer(data) {
       console.log("SetRemoteAnswer: " + JSON.stringify(data, 0, 4));
@@ -75,9 +75,9 @@ export default function App() {
       const answerDescription = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answerDescription);
 
-      socket.to(data.roomId).emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: data.roomId });
+      socketWeb.to(data.roomId).emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: data.roomId });
     }
-    socket.on("setRemoteAnswer", onSetRemoteAnswer);
+    socketWeb.on("setRemoteAnswer", onSetRemoteAnswer);
 
 
     async function onSetLocalAnswer(data) {
@@ -85,20 +85,20 @@ export default function App() {
       const answerDescription = new RTCSessionDescription(data.answerSdp);
       await peerConnection.setRemoteDescription(answerDescription);
     }
-    socket.on("setLocalAnswer", onSetLocalAnswer);
+    socketWeb.on("setLocalAnswer", onSetLocalAnswer);
 
 
     async function onGetICECandidates(data) {
       console.log("getICECandidates: " + JSON.stringify(data, 0, 4));
       peerConnection.addIceCandidate(data.candidate);
     }
-    socket.on("getICECandidates", onGetICECandidates);
+    socketWeb.on("getICECandidates", onGetICECandidates);
 
     return () => {
-      socket.off("setLocalOffer", onSetLocalOffer);
-      socket.off("setRemoteAnswer", onSetRemoteAnswer);
-      socket.off("setLocalAnswer", onSetLocalAnswer);
-      socket.off("getICECandidates", onGetICECandidates);
+      socketWeb.off("setLocalOffer", onSetLocalOffer);
+      socketWeb.off("setRemoteAnswer", onSetRemoteAnswer);
+      socketWeb.off("setLocalAnswer", onSetLocalAnswer);
+      socketWeb.off("getICECandidates", onGetICECandidates);
     }
   }, []);
 
@@ -155,8 +155,8 @@ export default function App() {
       if (e.candidate !== null) {
         console.log("here" + JSON.stringify(e));
         //Socket could be null call socket inside another func
-        console.log("socket check: " + socket);
-        socket.to(roomId).emit("exchangeICECandidates", { candidate: e.candidate, roomId: roomId });
+        console.log("socket check: " + socketWeb);
+        socketWeb.to(roomId).emit("exchangeICECandidates", { candidate: e.candidate, roomId: roomId });
       } else {
         console.log("candidate is null");
       }

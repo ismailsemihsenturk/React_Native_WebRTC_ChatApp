@@ -9,3 +9,4 @@ const connectionConfig = {
     transports: ['websocket'],
 };
 export const socket = io(WEBSOCKET_URL, connectionConfig);
+export const socketWeb = io("localhost:3000", connectionConfig);
