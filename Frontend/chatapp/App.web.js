@@ -12,24 +12,49 @@ import {
   mediaDevices,
   registerGlobals
 } from 'react-native-webrtc-web-shim';
-import io from "socket.io-client";
 import * as Crypto from 'expo-crypto';
 import { WEBSOCKET_URL } from '@env'
-import { socketWeb } from './socket';
+import { socket } from './socket.web';
 import { peerConnection, dataChannel } from './rtcPeer.web';
-import ChatApp from './ChatApp';
+import ChatApp from './ChatApp.web';
+import { Buffer } from "buffer";
+
+
 
 export default function App() {
 
-  const [isConnected, setIsConnected] = useState(socketWeb.connected);
-
-  const [localMediaStream, setLocalMediaStream] = useState(null);
-  const [remoteMediaStream, setRemoteMediaStream] = useState(null);
-
-  const [messages, setMessages] = useState([{}]);
-
+  const [isConnected, setIsConnected] = useState(socket.connected);
   const [roomId, setRoomId] = useState("");
   const guid = useRef();
+  const chatAppRef = useRef()
+
+  //SOCKET LISTENER CALLBACKS
+  async function onSetLocalOffer(data) {
+    console.log("setLocalOffer: " + JSON.stringify(data, 0, 4));
+    const offerDescription = await peerConnection.createOffer();
+    console.log("offerDesc: " + JSON.stringify(offerDescription));
+    await peerConnection.setLocalDescription(offerDescription);
+
+    socket.emit("getLocalOffer", { offerSdp: offerDescription, roomId: data.roomId });
+  }
+  async function onSetRemoteAnswer(data) {
+    console.log("SetRemoteAnswer: " + JSON.stringify(data, 0, 4));
+    const offerDescription = new RTCSessionDescription(data.offerSdp);
+    await peerConnection.setRemoteDescription(offerDescription);
+    const answerDescription = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answerDescription);
+
+    socket.emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: data.roomId });
+  }
+  async function onSetLocalAnswer(data) {
+    console.log("SetLocalAnswer: " + JSON.stringify(data, 0, 4));
+    const answerDescription = new RTCSessionDescription(data.answerSdp);
+    await peerConnection.setRemoteDescription(answerDescription);
+  }
+  async function onGetICECandidates(data) {
+    console.log("getICECandidates: " + JSON.stringify(data, 0, 4));
+    peerConnection.addIceCandidate(data.candidate);
+  }
 
 
   useEffect(() => {
@@ -45,12 +70,12 @@ export default function App() {
     }
 
 
-    socketWeb.on('connect', onConnect);
-    socketWeb.on('disconnect', onDisconnect);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
 
     return () => {
-      socketWeb.off('connect', onConnect);
-      socketWeb.off('disconnect', onDisconnect);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
     };
   }, []);
 
@@ -58,47 +83,16 @@ export default function App() {
   //SOCKET Listeners
   useEffect(() => {
 
-    async function onSetLocalOffer(data) {
-      console.log("setLocalOffer: " + JSON.stringify(data, 0, 4));
-      const offerDescription = await peerConnection.createOffer();
-      console.log("offerDesc: " + JSON.stringify(offerDescription));
-      await peerConnection.setLocalDescription(offerDescription);
-
-      socketWeb.to(data.roomId).emit("getLocalOffer", { offerSdp: offerDescription, roomId: data.roomId });
-    }
-    socketWeb.on("setLocalOffer", onSetLocalOffer);
-
-    async function onSetRemoteAnswer(data) {
-      console.log("SetRemoteAnswer: " + JSON.stringify(data, 0, 4));
-      const offerDescription = new RTCSessionDescription(data.offerSdp);
-      await peerConnection.setRemoteDescription(offerDescription);
-      const answerDescription = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answerDescription);
-
-      socketWeb.to(data.roomId).emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: data.roomId });
-    }
-    socketWeb.on("setRemoteAnswer", onSetRemoteAnswer);
-
-
-    async function onSetLocalAnswer(data) {
-      console.log("SetLocalAnswer: " + JSON.stringify(data, 0, 4));
-      const answerDescription = new RTCSessionDescription(data.answerSdp);
-      await peerConnection.setRemoteDescription(answerDescription);
-    }
-    socketWeb.on("setLocalAnswer", onSetLocalAnswer);
-
-
-    async function onGetICECandidates(data) {
-      console.log("getICECandidates: " + JSON.stringify(data, 0, 4));
-      peerConnection.addIceCandidate(data.candidate);
-    }
-    socketWeb.on("getICECandidates", onGetICECandidates);
+    socket.on("setLocalOffer", onSetLocalOffer);
+    socket.on("setRemoteAnswer", onSetRemoteAnswer);
+    socket.on("setLocalAnswer", onSetLocalAnswer);
+    socket.on("getICECandidates", onGetICECandidates);
 
     return () => {
-      socketWeb.off("setLocalOffer", onSetLocalOffer);
-      socketWeb.off("setRemoteAnswer", onSetRemoteAnswer);
-      socketWeb.off("setLocalAnswer", onSetLocalAnswer);
-      socketWeb.off("getICECandidates", onGetICECandidates);
+      socket.off("setLocalOffer", onSetLocalOffer);
+      socket.off("setRemoteAnswer", onSetRemoteAnswer);
+      socket.off("setLocalAnswer", onSetLocalAnswer);
+      socket.off("getICECandidates", onGetICECandidates);
     }
   }, []);
 
@@ -109,27 +103,27 @@ export default function App() {
   //RTC Ontrack Event Listener
   useEffect(() => {
     peerConnection.ontrack = (e) => {
+      console.log("web on track");
       // Grab the remote track from the connected participant.
-      console.log("remoteStream");
-      setRemoteMediaStream(e.streams[0]);
+      chatAppRef.current.setPeerStream(e.streams[0])
     }
-
-  }, [remoteMediaStream]);
+  }, []);
 
 
   //RTC Onmessage Event Listener
   useEffect(() => {
-    peerConnection.onmessage = (e) => {
-      console.log("message: " + JSON.stringify(e.data));
-      setMessages([...messages, { message: e.data.message, owner: e.data.owner }]);
+    dataChannel.onmessage = (e) => {
+      let temp = JSON.parse(e.data.toString());
+      chatAppRef.current.setPeerMessage(temp);
+
     }
 
     //DataChannel Event Listeners
-    peerConnection.onopen = (e) => {
+    dataChannel.onopen = (e) => {
     }
-    peerConnection.onclose = (e) => {
+    dataChannel.onclose = (e) => {
     }
-  }, [messages]);
+  }, []);
 
 
   //RTC Event Listeners
@@ -145,18 +139,14 @@ export default function App() {
     }
 
     peerConnection.ondatachannel = (e) => {
-      dataChannel = e.channel;
+      console.log("channel id: " + e.channel.id);
+      console.log("data channel is ready");
     }
 
     //ICE Event Listeners
     peerConnection.onicecandidate = (e) => {
-      console.log("candidate event: " + JSON.stringify(e.candidate));
-      console.log("peerCon: " + JSON.stringify(peerConnection));
       if (e.candidate !== null) {
-        console.log("here" + JSON.stringify(e));
-        //Socket could be null call socket inside another func
-        console.log("socket check: " + socketWeb);
-        socketWeb.to(roomId).emit("exchangeICECandidates", { candidate: e.candidate, roomId: roomId });
+        socket.emit("exchangeICECandidates", { candidate: e.candidate, roomId: roomId });
       } else {
         console.log("candidate is null");
       }
@@ -174,7 +164,7 @@ export default function App() {
 
   return (
     <>
-      <ChatApp guid={guid.current} roomId={roomId} setRoomId={setRoomId} localMediaStream={localMediaStream} setLocalMediaStream={setLocalMediaStream} remoteMediaStream={remoteMediaStream} messages={messages} ></ChatApp>
+      <ChatApp guid={guid.current} roomId={roomId} setRoomId={setRoomId} ref={chatAppRef}></ChatApp>
     </>
   );
 }

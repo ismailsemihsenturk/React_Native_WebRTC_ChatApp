@@ -8,5 +8,5 @@ const connectionConfig = {
     reconnectionAttempts: 100000,
     transports: ['websocket'],
 };
-export const socket = io(WEBSOCKET_URL, connectionConfig);
+export const socket = io("localhost:3000", connectionConfig);
 // export const socketWeb = io(WEBSOCKET_URL, connectionConfig);

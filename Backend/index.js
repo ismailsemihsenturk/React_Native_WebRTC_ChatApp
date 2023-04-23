@@ -36,7 +36,7 @@ io.sockets.on('connection', function (socket) {
 
     socket.on("getRemoteAnswer", (arg) => {
         console.log("getRemoteAnswer: " + JSON.stringify(arg, 0, 4));
-        socket.to(arg.roomId).emit("setLocalAnswer", { answerSdp: arg.offerSdp, roomId: arg.roomId });
+        socket.to(arg.roomId).emit("setLocalAnswer", { answerSdp: arg.answerSdp, roomId: arg.roomId });
     });
 
     socket.on("exchangeICECandidates", (arg) => {

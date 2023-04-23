@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { ScrollView, StyleSheet, Text, View, SafeAreaView, Button, KeyboardAvoidingView, TextInput, TouchableOpacity, Platform } from 'react-native';
 import {
     ScreenCapturePickerView,
@@ -12,22 +12,27 @@ import {
     mediaDevices,
     registerGlobals
 } from 'react-native-webrtc-web-shim';
-import io from "socket.io-client";
 import * as Crypto from 'expo-crypto';
 import { WEBSOCKET_URL } from '@env'
-import { socketWeb } from './socket';
+import { socket } from './socket.web';
 import { peerConnection, dataChannel, mediaConstraints } from './rtcPeer.web';
 import Messenger from './Messenger';
+import { Buffer } from "buffer";
 
 
-export default function ChatApp(props) {
+
+
+const ChatApp = (props, ref) => {
 
     const [isRoomCreated, setIsRoomCreated] = useState(false);
     const [isCallCreated, setIsCallCreated] = useState(false);
     const [isCallJoined, setIsCallJoined] = useState(false);
-    const [joinId, setJoinId] = useState();
-    const [videoTrack, setVideoTrack] = useState(null);
+    const [joinId, setJoinId] = useState("");
+    const [videoTrack, setVideoTrack] = useState();
 
+    const [localMediaStream, setLocalMediaStream] = useState();
+    const [remoteMediaStream, setRemoteMediaStream] = useState();
+    const [messages, setMessages] = useState([{}]);
     const [myMessage, setMyMessage] = useState("");
 
     const scrollViewRef = useRef(ScrollView);
@@ -35,6 +40,22 @@ export default function ChatApp(props) {
 
     const cameraCount = useRef(0);
     let isVoiceOnly = false;
+
+    useImperativeHandle(ref, () => ({
+        // methods connected to `ref`
+        setPeerStream: (stream) => { setPeerStream(stream) },
+        setPeerMessage: (message) => { setPeerMessage(message) }
+    }));
+
+    const setPeerStream = (stream) => {
+        console.log("remote stream" + JSON.stringify(stream, 0, 4));
+        setRemoteMediaStream(stream);
+        console.log("remote Media Stream: " + JSON.stringify(remoteMediaStream));
+    }
+    const setPeerMessage = (message) => {
+        console.log("message received" + message);
+        setMessages([...messages, { message: e.data.message, owner: e.data.owner }]);
+    }
 
     //Get Available Media Devices
     const createRoom = async () => {
@@ -52,6 +73,7 @@ export default function ChatApp(props) {
 
         try {
             const mediaStream = await mediaDevices.getUserMedia(mediaConstraints);
+            console.log("local stream: " + JSON.stringify(mediaStream, 0, 4));
 
             if (isVoiceOnly) {
                 let videoTrackObj = await mediaStream.getVideoTracks()[0];
@@ -59,13 +81,13 @@ export default function ChatApp(props) {
                 videoTrack.enabled = true;
             };
 
-            props.setLocalMediaStream(mediaStream);
-            props.localMediaStream.getTracks().forEach(
-                track => peerConnection.addTrack(track, props.localMediaStream)
+            setLocalMediaStream(mediaStream);
+            mediaStream.getTracks().forEach(
+                track => peerConnection.addTrack(track, mediaStream)
             );
 
         } catch (err) {
-            // Handle Error
+            console.log(err);
         };
         setIsRoomCreated(!isRoomCreated);
     }
@@ -77,62 +99,63 @@ export default function ChatApp(props) {
         props.setRoomId(randomRoomId);
         setJoinId(randomRoomId);
         setIsCallCreated(!isCallCreated);
-        socketWeb.emit("create", randomRoomId);
+        socket.emit("create", randomRoomId);
 
     };
 
 
     // Join The Remote Call
-    const joinCall = async () => {
-        setIsCallJoined(!isCallJoined);
+    const joinCall = () => {
+        setIsCallJoined(true);
         // Get the offer from signaling server and answer it 
-        socketWeb.emit("create", joinId);
-        socketWeb.emit("start", { roomId: joinId });
+        socket.emit("create", joinId);
+        socket.emit("start", { roomId: joinId });
     };
 
     // sendMessage via dataChannel
     const sendMessage = () => {
-        console.log("mesage send");
+        console.log("message send");
         const msg = {
             message: myMessage,
             owner: props.guid
         };
-        dataChannel.send(msg);
+        let buffer = Buffer.from(JSON.stringify(msg));
+        dataChannel.send(buffer);
+        setMyMessage("");
     };
 
     // After the call has finished 
-    function callHasFinished() {
-        props.localMediaStream.getTracks().forEach(
+    const callHasFinished = () => {
+        localMediaStream.getTracks().forEach(
             track => track.stop()
         );
 
-        props.localMediaStream = null;
+        localMediaStream = null;
         peerConnection.close();
         peerConnection = null;
         dataChannel.close();
         dataChannel = null;
-        setIsCallCreated(!isCallCreated);
-        setIsCallJoined(!isCallJoined);
+        setIsCallCreated(false);
+        setIsCallJoined(false);
     }
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.chatButton}>
-                {!props.localMediaStream && (
+                {!localMediaStream && (
                     <View style={styles.buttonItem}>
                         <Button title="Click to start stream" onPress={() => createRoom()} />
                     </View>
                 )}
-                {!isCallJoined && props.localMediaStream && (
+                {!isCallJoined && localMediaStream && (
                     <View style={styles.buttonItem}>
                         <Button
                             title="Click to start call"
                             onPress={() => startCall()}
-                            disabled={props.remoteMediaStream}
                         />
                     </View>
                 )}
-                {props.localMediaStream && (
+                {localMediaStream && (
                     <KeyboardAvoidingView
                         behavior={Platform.OS === "ios" ? "padding" : "height"}
                         style={styles.roomWrapper}
@@ -145,7 +168,7 @@ export default function ChatApp(props) {
                             value={joinId}
                         />
 
-                        {!isCallCreated && props.localMediaStream && (
+                        {!isCallCreated && localMediaStream && (
                             <TouchableOpacity onPress={() => joinCall()}>
                                 <View>
                                     <Text style={styles.roomWrapperButton}>Join Call</Text>
@@ -155,31 +178,30 @@ export default function ChatApp(props) {
 
                     </KeyboardAvoidingView>
                 )}
-                {props.localMediaStream && props.remoteMediaStream && (
+                {localMediaStream && remoteMediaStream && (
                     <View style={styles.buttonItem}>
                         <Button
                             title="Click to stop call"
                             onPress={() => callHasFinished()}
-                            disabled={!props.remoteMediaStream}
                         />
                     </View>
                 )}
             </View>
 
             <View style={styles.rtcView}>
-                {props.localMediaStream && (
+                {localMediaStream && (
                     <RTCView
                         style={styles.rtc}
-                        stream={props.localMediaStream}
+                        stream={localMediaStream}
                         mirror={true}
                     />
                 )}
             </View>
             <View style={styles.rtcView}>
-                {props.remoteMediaStream && (
+                {remoteMediaStream && (
                     <RTCView
                         style={styles.rtc}
-                        stream={props.remoteMediaStream}
+                        stream={remoteMediaStream}
                         mirror={true}
                     />
                 )}
@@ -193,7 +215,7 @@ export default function ChatApp(props) {
                 }
             >
 
-                {props.messages.map((message, index) => {
+                {messages.map((message, index) => {
                     return (
                         <Messenger message={message} key={index} guid={props.guid} />
                     );
@@ -341,3 +363,4 @@ const styles = StyleSheet.create({
         backgroundColor: "#f2f0f0",
     },
 });
+export default forwardRef(ChatApp);
