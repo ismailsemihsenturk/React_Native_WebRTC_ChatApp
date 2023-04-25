@@ -44,15 +44,11 @@ export default function App() {
     //DataChannel Event Listeners
     if (dataChannel.current != undefined) {
       dataChannel.current.onmessage = (e) => {
-        // console.log("message: " + JSON.parse(e.data));
-        // console.log("message2: " + JSON.parse(e.data));
-        console.log("message3: " + e);
-        console.log("message4: " + e.data);
         console.log("message5: " + JSON.stringify(e));
         console.log("message6: " + JSON.stringify(e.data));
 
-        // let temp = JSON.parse(e.data.toString());
-        // chatAppRef.current.setPeerMessage(temp);
+        let temp = JSON.stringify(e.data);
+        chatAppRef.current.setPeerMessage(temp);
       };
       dataChannel.current.onopen = (e) => {
       };
