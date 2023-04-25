@@ -15,7 +15,7 @@ import {
 import * as Crypto from 'expo-crypto';
 import { WEBSOCKET_URL } from '@env'
 import { socket } from './socket.web';
-import { peerConnection, dataChannel } from './rtcPeer.web';
+import { peerConnection } from './rtcPeer.web';
 import ChatApp from './ChatApp.web';
 import { Buffer } from "buffer";
 
@@ -26,7 +26,8 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [roomId, setRoomId] = useState("");
   const guid = useRef();
-  const chatAppRef = useRef()
+  const chatAppRef = useRef();
+  const dataChannel = useRef();
 
   //SOCKET LISTENER CALLBACKS
   async function onSetLocalOffer(data) {
@@ -36,6 +37,28 @@ export default function App() {
     await peerConnection.setLocalDescription(offerDescription);
 
     socket.emit("getLocalOffer", { offerSdp: offerDescription, roomId: data.roomId });
+
+    //SET DATACHANNEL FOR LOCAL 
+    dataChannel.current = peerConnection.createDataChannel("chat_channel");
+
+    //DataChannel Event Listeners
+    if (dataChannel.current != undefined) {
+      dataChannel.current.onmessage = (e) => {
+        // console.log("message: " + JSON.parse(e.data));
+        // console.log("message2: " + JSON.parse(e.data));
+        console.log("message3: " + e);
+        console.log("message4: " + e.data);
+        console.log("message5: " + JSON.stringify(e));
+        console.log("message6: " + JSON.stringify(e.data));
+
+        // let temp = JSON.parse(e.data.toString());
+        // chatAppRef.current.setPeerMessage(temp);
+      };
+      dataChannel.current.onopen = (e) => {
+      };
+      dataChannel.current.onclose = (e) => {
+      };
+    }
   }
   async function onSetRemoteAnswer(data) {
     console.log("SetRemoteAnswer: " + JSON.stringify(data, 0, 4));
@@ -45,6 +68,33 @@ export default function App() {
     await peerConnection.setLocalDescription(answerDescription);
 
     socket.emit("getRemoteAnswer", { answerSdp: answerDescription, roomId: data.roomId });
+
+    //SET DATACHANNEL FOR REMOTE
+    peerConnection.ondatachannel = (e) => {
+      console.log("channel id: " + e.channel.id);
+      console.log("channel: " + JSON.stringify(e.channel));
+      dataChannel.current = e.channel;
+      chatAppRef.current.setPeerDataChannel(dataChannel.current);
+    };
+
+    //DataChannel Event Listeners
+    if (dataChannel.current != undefined) {
+      dataChannel.current.onmessage = (e) => {
+        // console.log("message: " + JSON.parse(e.data));
+        // console.log("message2: " + JSON.parse(e.data));
+        console.log("message3: " + e);
+        console.log("message4: " + e.data);
+        console.log("message5: " + JSON.stringify(e));
+        console.log("message6: " + JSON.stringify(e.data));
+
+        // let temp = JSON.parse(e.data.toString());
+        // chatAppRef.current.setPeerMessage(temp);
+      };
+      dataChannel.current.onopen = (e) => {
+      };
+      dataChannel.current.onclose = (e) => {
+      };
+    }
   }
   async function onSetLocalAnswer(data) {
     console.log("SetLocalAnswer: " + JSON.stringify(data, 0, 4));
@@ -102,29 +152,16 @@ export default function App() {
 
   //RTC Ontrack Event Listener
   useEffect(() => {
-    peerConnection.ontrack = (e) => {
-      console.log("web on track");
+    peerConnection.ontrack = ({ track, streams }) => {
       // Grab the remote track from the connected participant.
-      chatAppRef.current.setPeerStream(e.streams[0])
+      console.log("web on track: " + JSON.stringify(track));
+      console.log("web on streams: " + JSON.stringify(streams));
+      chatAppRef.current.setPeerStream(streams[0]);
+    }
+    peerConnection.onaddstream = ({ stream }) => {
+      console.log("web on add stream streams: " + JSON.stringify(stream));
     }
   }, []);
-
-
-  //RTC Onmessage Event Listener
-  useEffect(() => {
-    dataChannel.onmessage = (e) => {
-      let temp = JSON.parse(e.data.toString());
-      chatAppRef.current.setPeerMessage(temp);
-
-    }
-
-    //DataChannel Event Listeners
-    dataChannel.onopen = (e) => {
-    }
-    dataChannel.onclose = (e) => {
-    }
-  }, []);
-
 
   //RTC Event Listeners
   useEffect(() => {
@@ -136,11 +173,6 @@ export default function App() {
     }
     peerConnection.onsignalingstatechange = (e) => {
 
-    }
-
-    peerConnection.ondatachannel = (e) => {
-      console.log("channel id: " + e.channel.id);
-      console.log("data channel is ready");
     }
 
     //ICE Event Listeners

@@ -15,7 +15,7 @@ import {
 import * as Crypto from 'expo-crypto';
 import { WEBSOCKET_URL } from '@env'
 import { socket } from './socket.web';
-import { peerConnection, dataChannel, mediaConstraints } from './rtcPeer.web';
+import { peerConnection, mediaConstraints } from './rtcPeer.web';
 import Messenger from './Messenger';
 import { Buffer } from "buffer";
 
@@ -37,25 +37,46 @@ const ChatApp = (props, ref) => {
 
     const scrollViewRef = useRef(ScrollView);
     const roomTextInputRef = useRef(TextInput);
+    const dataChannel = useRef();
 
     const cameraCount = useRef(0);
     let isVoiceOnly = false;
 
-    useImperativeHandle(ref, () => ({
+    useImperativeHandle(ref, () => {
         // methods connected to `ref`
-        setPeerStream: (stream) => { setPeerStream(stream) },
-        setPeerMessage: (message) => { setPeerMessage(message) }
-    }));
+        return {
+            setPeerStream: (stream) => {
+                console.log("remote stream STRINGIFY: " + JSON.stringify(stream, 0, 4));
+                console.log("remote stream length: " + stream._tracks?.length);
 
-    const setPeerStream = (stream) => {
-        console.log("remote stream" + JSON.stringify(stream, 0, 4));
-        setRemoteMediaStream(stream);
+                let tempStream = stream;
+                setRemoteMediaStream(tempStream);
+                setIsCallJoined(true);
+
+                // if (stream._tracks?.length === 2) {
+                //     if (stream._tracks[0].kind === "audio" && stream._tracks[1].kind === "video" || stream._tracks[0].kind === "video" && stream._tracks[1].kind === "audio") {
+                //         console.log("there is a video and an audio");
+                //         setRemoteMediaStream(stream);
+                //         setIsCallJoined(true);
+                //     }
+                // }
+            },
+            setPeerMessage: (message) => {
+                console.log("message received" + message);
+                setMessages([...messages, { message: e.data.message, owner: e.data.owner }]);
+            },
+            setPeerDataChannel: (_dataChannel) => {
+                console.log("data channel: " + JSON.stringify(_dataChannel));
+                dataChannel.current = _dataChannel;
+            },
+        }
+
+    }, [remoteMediaStream, messages]);
+
+    useEffect(() => {
         console.log("remote Media Stream: " + JSON.stringify(remoteMediaStream));
-    }
-    const setPeerMessage = (message) => {
-        console.log("message received" + message);
-        setMessages([...messages, { message: e.data.message, owner: e.data.owner }]);
-    }
+    }, [remoteMediaStream]);
+
 
     //Get Available Media Devices
     const createRoom = async () => {
@@ -89,7 +110,7 @@ const ChatApp = (props, ref) => {
         } catch (err) {
             console.log(err);
         };
-        setIsRoomCreated(!isRoomCreated);
+        setIsRoomCreated(true);
     }
 
     // Initiate The Call
@@ -98,7 +119,7 @@ const ChatApp = (props, ref) => {
         roomTextInputRef.current.value = randomRoomId;
         props.setRoomId(randomRoomId);
         setJoinId(randomRoomId);
-        setIsCallCreated(!isCallCreated);
+        setIsCallCreated(true);
         socket.emit("create", randomRoomId);
 
     };
@@ -106,7 +127,6 @@ const ChatApp = (props, ref) => {
 
     // Join The Remote Call
     const joinCall = () => {
-        setIsCallJoined(true);
         // Get the offer from signaling server and answer it 
         socket.emit("create", joinId);
         socket.emit("start", { roomId: joinId });
@@ -120,7 +140,9 @@ const ChatApp = (props, ref) => {
             owner: props.guid
         };
         let buffer = Buffer.from(JSON.stringify(msg));
-        dataChannel.send(buffer);
+        console.log("myMessage: " + myMessage);
+        console.log("buffer: " + buffer);
+        dataChannel.current?.send(buffer);
         setMyMessage("");
     };
 
@@ -133,8 +155,8 @@ const ChatApp = (props, ref) => {
         localMediaStream = null;
         peerConnection.close();
         peerConnection = null;
-        dataChannel.close();
-        dataChannel = null;
+        dataChannel.current?.close();
+        dataChannel.current = null;
         setIsCallCreated(false);
         setIsCallJoined(false);
     }
@@ -147,7 +169,7 @@ const ChatApp = (props, ref) => {
                         <Button title="Click to start stream" onPress={() => createRoom()} />
                     </View>
                 )}
-                {!isCallJoined && localMediaStream && (
+                {isRoomCreated && !isCallCreated && !isCallJoined && localMediaStream && (
                     <View style={styles.buttonItem}>
                         <Button
                             title="Click to start call"
@@ -168,7 +190,7 @@ const ChatApp = (props, ref) => {
                             value={joinId}
                         />
 
-                        {!isCallCreated && localMediaStream && (
+                        {isRoomCreated && localMediaStream && (
                             <TouchableOpacity onPress={() => joinCall()}>
                                 <View>
                                     <Text style={styles.roomWrapperButton}>Join Call</Text>
