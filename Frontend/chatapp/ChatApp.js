@@ -50,14 +50,6 @@ const ChatApp = (props, ref) => {
                 let tempStream = stream;
                 setRemoteMediaStream(tempStream);
                 setIsCallJoined(true);
-
-                // if (stream._tracks?.length === 2) {
-                //     if (stream._tracks[0].kind === "audio" && stream._tracks[1].kind === "video" || stream._tracks[0].kind === "video" && stream._tracks[1].kind === "audio") {
-                //         console.log("there is a video and an audio");
-                //         setRemoteMediaStream(stream);
-                //         setIsCallJoined(true);
-                //     }
-                // }
             },
             setPeerMessage: (message) => {
                 console.log("message received" + message);
@@ -190,7 +182,7 @@ const ChatApp = (props, ref) => {
                             value={joinId}
                         />
 
-                        {isRoomCreated && localMediaStream && (
+                        {isRoomCreated && !isCallCreated && !isCallJoined && localMediaStream && (
                             <TouchableOpacity onPress={() => joinCall()}>
                                 <View>
                                     <Text style={styles.roomWrapperButton}>Join Call</Text>
