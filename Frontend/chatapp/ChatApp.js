@@ -136,6 +136,7 @@ const ChatApp = (props, ref) => {
         console.log("buffer: " + buffer);
         dataChannel.current?.send(buffer);
         setMyMessage("");
+        setMessages([...messages, { message: e.data.message, owner: e.data.owner }]);
     };
 
     // After the call has finished 
